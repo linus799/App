@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+
+<!-- ▼ PWA / "echte App"-Verhalten auf dem iPhone:
+     Nach "Zum Home-Bildschirm hinzufügen" startet die Seite vollflächig,
+     ohne Safari-Leisten, mit eigenem Icon (icon.png im selben Ordner!) -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="VANTA">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="theme-color" content="#050505">
+
+<title>VANTA</title>
+
+<!-- Google Fonts (braucht einmalig Internet, danach greift der Fallback-Stack) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   ▼▼▼ HIER ANPASSEN ▼▼▼
+   --accent : DIE eine Akzentfarbe der ganzen App.
+              Neongrün: #00FF88  |  Blutrot: #FF2D2D
+   App-Name : unten im <script> die Konstante APP_NAME
+   ============================================================ */
+:root{
+  --accent: #00FF88;
+  --bg: #050505;
+
+  --ink: #F2F2F2;
+  --ink-dim: #707070;
+  --panel: #0C0C0C;
+  --line: #1D1D1D;
+  --danger: #FF3B3B;
+
+  --font-display: "Chakra Petch", "Courier New", monospace;
+  --font-body: "Space Grotesk", -apple-system, "Helvetica Neue", sans-serif;
+}
+
+/* Winkel-Property für rotierende Glow-Rahmen (Safari 16.4+) */
+@property --spin { syntax:"<angle>"; initial-value:0deg; inherits:false; }
+
+*{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+html,body{
+  height:100%;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--font-body);
+  overflow:hidden;
+  overscroll-behavior:none;
+  -webkit-user-select:none; user-select:none;
+}
+
+/* ---------- Atmosphäre ---------- */
+#particles{ position:fixed; inset:0; z-index:0; pointer-events:none; }
+
+.breath{
+  position:fixed; inset:-30%; z-index:0; pointer-events:none;
+  background:radial-gradient(circle at 50% 35%,
+    color-mix(in srgb, var(--accent) 10%, transparent) 0%, transparent 55%);
+  animation:breath 4.5s ease-in-out infinite;
+}
+@keyframes breath{
+  0%,100%{ opacity:.45; transform:scale(1); }
+  50%    { opacity:1;   transform:scale(1.14); }
+}
+.scanlines{
+  position:fixed; inset:0; z-index:90; pointer-events:none;
+  background:repeating-linear-gradient(0deg,
+    rgba(255,255,255,.025) 0 1px, transparent 1px 4px);
+  mix-blend-mode:overlay;
+  animation:scanShift 9s linear infinite;
+}
+@keyframes scanShift{ to{ transform:translateY(4px); } }
+.vignette{
+  position:fixed; inset:0; z-index:89; pointer-events:none;
+  background:radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,.6) 100%);
+}
+
+/* Globaler Glitch: Body bekommt kurz die Klasse .glitch */
+body.glitch .screen.active{ animation:rgbJolt .28s steps(2) 1; }
+@keyframes rgbJolt{
+  0%  { transform:translate(-5px,2px) skewX(-1.5deg); filter:saturate(3) contrast(1.4); }
+  50% { transform:translate(4px,-2px) skewX(1deg);    filter:hue-rotate(18deg) saturate(2); }
+  100%{ transform:none; filter:none; }
+}
+
+/* ---------- Screen-Grundgerüst ---------- */
+.screen{
+  position:fixed; inset:0; z-index:1;
+  display:none; flex-direction:column;
+  height:100dvh;
+  padding:max(env(safe-area-inset-top), 22px) 22px 0;
+  overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch;
+}
+.screen.active{ display:flex; animation:screenIn .3s ease both; }
+@keyframes screenIn{
+  from{ opacity:0; transform:translateY(12px) scale(.985); filter:blur(4px); }
+  to  { opacity:1; transform:none; filter:none; }
+}
+.screen.has-tabs{ padding-bottom:calc(92px + env(safe-area-inset-bottom)); }
+
+/* ---------- Typo ---------- */
+h1,h2,h3,.btn,.tab,.eyebrow{ font-family:var(--font-display); }
+.eyebrow{
+  font-size:13px; letter-spacing:.34em; text-transform:uppercase;
+  color:var(--accent); font-weight:600;
+  display:flex; align-items:center; gap:10px;
+}
+.eyebrow::after{
+  content:""; flex:1; height:1px;
+  background:linear-gradient(90deg, color-mix(in srgb, var(--accent) 50%, transparent), transparent);
+}
+.dim{ color:var(--ink-dim); }
+
+/* ---------- Buttons ---------- */
+.btn{
+  display:block; width:100%;
+  padding:20px;
+  font-size:21px; font-weight:700; letter-spacing:.18em; text-transform:uppercase;
+  color:#000; background:var(--accent);
+  border:none; border-radius:14px;
+  box-shadow:0 0 30px color-mix(in srgb, var(--accent) 50%, transparent);
+  cursor:pointer; position:relative; overflow:hidden;
+  animation:btnBreath 2.2s ease-in-out infinite;
+  transition:transform .1s ease;
+}
+@keyframes btnBreath{
+  0%,100%{ box-shadow:0 0 18px color-mix(in srgb, var(--accent) 35%, transparent); }
+  50%    { box-shadow:0 0 42px color-mix(in srgb, var(--accent) 75%, transparent); }
+}
+.btn::after{ /* durchlaufender Lichtreflex */
+  content:""; position:absolute; top:0; left:-80%;
+  width:50%; height:100%;
+  background:linear-gradient(100deg, transparent, rgba(255,255,255,.5), transparent);
+  animation:btnSweep 2.4s ease-in-out infinite;
+}
+@keyframes btnSweep{ 0%,55%{ left:-80%; } 100%{ left:140%; } }
+.btn:active{ transform:scale(.96); }
+.btn.ghost{
+  background:transparent; color:var(--accent);
+  border:1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  animation:none; box-shadow:none;
+}
+.btn.ghost::after{ display:none; }
+.btn[disabled]{ opacity:.25; pointer-events:none; animation:none; box-shadow:none; }
+
+/* ---------- Ticker (Intro + Home) ---------- */
+.ticker{
+  position:relative; overflow:hidden; white-space:nowrap;
+  border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+  padding:10px 0; margin:0 -22px;
+  font-family:var(--font-display); font-size:14px; letter-spacing:.14em;
+  color:var(--ink-dim); text-transform:uppercase;
+}
+.ticker .track{ display:inline-block; animation:ticker 16s linear infinite; }
+.ticker b{ color:var(--accent); font-weight:600; }
+.ticker .sep{ margin:0 22px; color:var(--accent); opacity:.5; }
+@keyframes ticker{ to{ transform:translateX(-50%); } }
+
+/* ============================================================
+   SCREEN 1 — INTRO
+   ============================================================ */
+#intro{ justify-content:center; align-items:center; text-align:center; }
+
+.logo-wrap{ position:relative; width:170px; height:170px; margin-bottom:30px; }
+.logo{
+  width:100%; height:100%;
+  animation:logoPulse 2.4s ease-in-out infinite;
+}
+@keyframes logoPulse{
+  0%,100%{ filter:drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 50%, transparent)); transform:scale(1); }
+  50%    { filter:drop-shadow(0 0 34px var(--accent)); transform:scale(1.05); }
+}
+/* rotierender Orbit-Ring um das Logo */
+.orbit{
+  position:absolute; inset:-16px;
+  border-radius:50%;
+  border:1px dashed color-mix(in srgb, var(--accent) 35%, transparent);
+  animation:orbit 14s linear infinite;
+}
+.orbit::before{ /* heller Satellit auf dem Ring */
+  content:""; position:absolute; top:-4px; left:50%;
+  width:8px; height:8px; border-radius:50%;
+  background:var(--accent);
+  box-shadow:0 0 12px var(--accent);
+}
+.orbit.r2{ inset:-34px; animation-duration:23s; animation-direction:reverse; opacity:.5; }
+@keyframes orbit{ to{ transform:rotate(360deg); } }
+
+/* Iris driftet + Auge blinzelt (SVG ist inline → CSS greift) */
+.iris{ animation:irisDrift 6s ease-in-out infinite; transform-origin:50px 60px; }
+@keyframes irisDrift{
+  0%,100%{ transform:translate(0,0); }
+  25%{ transform:translate(-6px,2px); }
+  55%{ transform:translate(6px,-2px); }
+  80%{ transform:translate(0,3px); }
+}
+.eyeball{ animation:blink 5.5s ease-in-out infinite; transform-origin:50px 62px; }
+@keyframes blink{
+  0%, 91%, 100%{ transform:scaleY(1); }
+  94%, 96%     { transform:scaleY(.06); }
+}
+
+.appname{
+  font-size:66px; font-weight:700; letter-spacing:.30em; padding-left:.30em;
+  position:relative; line-height:1;
+}
+.appname::before,.appname::after{
+  content:attr(data-text);
+  position:absolute; inset:0; padding-left:.30em; opacity:0;
+}
+.appname::before{ color:var(--accent); }
+.appname::after{ color:#fff; }
+.glitching .appname::before{ animation:glitchA .3s steps(3) 1; }
+.glitching .appname::after { animation:glitchB .3s steps(3) 1; }
+@keyframes glitchA{ 0%{opacity:.85; transform:translate(-5px,2px);} 50%{transform:translate(4px,-3px);} 100%{opacity:0;} }
+@keyframes glitchB{ 0%{opacity:.55; transform:translate(5px,-2px);} 50%{transform:translate(-4px,3px);} 100%{opacity:0;} }
+
+.slogan{ margin-top:24px; font-size:25px; line-height:1.4; font-weight:500; max-width:310px; }
+.slogan b{ color:var(--accent); font-weight:700; text-shadow:0 0 18px color-mix(in srgb, var(--accent) 60%, transparent); }
+.slogan-sub{
+  margin-top:10px; font-size:16px; color:var(--ink-dim); letter-spacing:.1em;
+  border-right:2px solid var(--accent);          /* Cursor für Type-Effekt */
+  padding-right:4px; min-height:22px;
+  animation:cursorBlink .8s steps(1) infinite;
+}
+@keyframes cursorBlink{ 50%{ border-color:transparent; } }
+
+#intro .btn{ max-width:320px; margin-top:44px; }
+.watchers{
+  margin:20px 0 18px; font-size:14px; letter-spacing:.22em; text-transform:uppercase;
+  color:var(--ink-dim);
+}
+.watchers b{ color:var(--accent); font-family:var(--font-display); }
+.watchers i{
+  display:inline-block; width:8px; height:8px; border-radius:50%;
+  background:var(--accent); margin-right:8px;
+  animation:pulseDot .9s ease-in-out infinite;
+}
+@keyframes pulseDot{ 0%,100%{ opacity:1; transform:scale(1);} 50%{ opacity:.3; transform:scale(.7);} }
+
+/* ============================================================
+   SCREEN 2 — BERECHTIGUNGEN
+   ============================================================ */
+#permissions{ justify-content:center; }
+#permissions h2{ font-size:34px; letter-spacing:.05em; margin:14px 0 6px; }
+.perm-list{ margin:26px 0 12px; display:flex; flex-direction:column; gap:11px; }
+.perm{
+  display:flex; align-items:center; gap:16px;
+  background:var(--panel); border:1px solid var(--line);
+  border-radius:14px; padding:17px;
+  opacity:.3; transform:translateX(-14px);
+  transition:all .3s ease;
+}
+.perm.on{
+  opacity:1; transform:none;
+  border-color:color-mix(in srgb, var(--accent) 45%, transparent);
+  box-shadow:0 0 16px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.perm-name{ font-size:20px; font-weight:500; flex:1; }
+.perm-scan{
+  font-family:var(--font-display); font-size:12px; letter-spacing:.18em;
+  color:var(--ink-dim); display:none;
+}
+.perm.on .perm-scan{ display:block; color:var(--accent); animation:countGlow .8s ease-in-out infinite; }
+.perm-check{
+  width:30px; height:30px; border-radius:8px;
+  border:1px solid var(--line);
+  display:grid; place-items:center;
+  font-family:var(--font-display); font-size:18px; color:#000;
+}
+.perm.on .perm-check{
+  background:var(--accent);
+  box-shadow:0 0 16px color-mix(in srgb, var(--accent) 70%, transparent);
+  animation:checkPop .25s ease;
+}
+@keyframes checkPop{ from{ transform:scale(.3) rotate(-15deg); } to{ transform:scale(1); } }
+.perm-note{
+  font-size:14px; color:var(--ink-dim); text-align:center;
+  margin:6px 0 20px; letter-spacing:.04em;
+}
+
+/* ============================================================
+   SCREEN 3 — HOME / CHALLENGE
+   ============================================================ */
+.topbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+.topbar .mini-logo{ width:36px; height:36px; animation:logoPulse 2.4s ease-in-out infinite; }
+.topbar .appname-small{ font-family:var(--font-display); font-size:18px; letter-spacing:.3em; font-weight:700; }
+.topbar .live{
+  font-family:var(--font-display); font-size:12px; letter-spacing:.2em; color:var(--danger);
+  display:flex; align-items:center; gap:6px;
+}
+.topbar .live i{
+  width:8px; height:8px; border-radius:50%; background:var(--danger);
+  box-shadow:0 0 10px var(--danger);
+  animation:pulseDot .8s steps(1) infinite;
+}
+
+.status-card{
+  background:var(--panel); border:1px solid var(--line); border-radius:18px;
+  padding:17px 18px; margin-bottom:14px;
+  display:flex; justify-content:space-between; align-items:center; gap:8px;
+  position:relative; overflow:hidden;
+}
+.status-card::after{ /* feiner Scan-Strahl */
+  content:""; position:absolute; top:0; bottom:0; width:60px; left:-80px;
+  background:linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 8%, transparent), transparent);
+  animation:sweep 3.2s linear infinite;
+}
+@keyframes sweep{ to{ left:110%; } }
+.status-block .lbl{ font-size:12px; letter-spacing:.2em; text-transform:uppercase; color:var(--ink-dim); }
+.status-block .val{ font-family:var(--font-display); font-size:25px; font-weight:700; margin-top:3px; }
+.status-block .val.accent{ color:var(--accent); text-shadow:0 0 16px color-mix(in srgb, var(--accent) 55%, transparent); }
+.countdown{ font-variant-numeric:tabular-nums; animation:countGlow .8s ease-in-out infinite; }
+.countdown.hot{ color:var(--danger); text-shadow:0 0 16px var(--danger); animation-duration:.4s; }
+@keyframes countGlow{ 0%,100%{opacity:1;} 50%{opacity:.55;} }
+
+/* Challenge-Karte mit rotierendem Glow-Rahmen */
+.glow-frame{
+  position:relative; border-radius:21px; padding:1.5px; margin-bottom:14px;
+  background:conic-gradient(from var(--spin),
+    transparent 0deg, var(--accent) 45deg, transparent 110deg,
+    transparent 180deg, color-mix(in srgb, var(--accent) 60%, transparent) 230deg, transparent 300deg);
+  animation:spinFrame 3.5s linear infinite;
+}
+@keyframes spinFrame{ to{ --spin:360deg; } }
+.challenge-card{
+  position:relative; border-radius:20px;
+  background:linear-gradient(170deg, #101010, #060606);
+  padding:24px 20px 22px; overflow:hidden;
+}
+.ch-meta{
+  display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;
+  font-family:var(--font-display); font-size:14px; letter-spacing:.2em; text-transform:uppercase;
+}
+.ch-meta .risk{ color:var(--accent); animation:countGlow 1.1s ease-in-out infinite; }
+.ch-title{
+  font-size:31px; line-height:1.22; font-weight:700; letter-spacing:.02em;
+  min-height:76px; transition:filter .4s ease;
+}
+.ch-title.locked{ filter:blur(15px); }
+.ch-sub{ margin-top:10px; font-size:16px; color:var(--ink-dim); min-height:24px; }
+
+.stake-box{ margin-top:20px; }
+.stake-row{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; font-family:var(--font-display); }
+.stake-row .lbl{ font-size:13px; letter-spacing:.22em; text-transform:uppercase; color:var(--ink-dim); }
+.stake-val{
+  font-size:40px; font-weight:700; color:var(--accent); font-variant-numeric:tabular-nums;
+  text-shadow:0 0 22px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+input[type=range]{
+  width:100%; appearance:none; -webkit-appearance:none;
+  height:6px; border-radius:3px;
+  background:linear-gradient(90deg, var(--accent) var(--fill,16%), var(--line) var(--fill,16%));
+  margin:10px 0 12px;
+}
+input[type=range]::-webkit-slider-thumb{
+  appearance:none; -webkit-appearance:none;
+  width:32px; height:32px; border-radius:50%;
+  background:var(--accent);
+  box-shadow:0 0 18px color-mix(in srgb, var(--accent) 80%, transparent);
+}
+.payout{ display:flex; justify-content:space-between; font-size:17px; margin-bottom:16px; }
+.payout b{
+  font-family:var(--font-display); color:var(--accent); font-size:21px;
+  font-variant-numeric:tabular-nums;
+}
+.forfeit{ margin-top:12px; text-align:center; font-size:13px; color:var(--ink-dim); letter-spacing:.06em; }
+.forfeit b{ color:var(--danger); font-weight:500; }
+.action-stack{ display:flex; flex-direction:column; gap:12px; margin-top:4px; }
+
+/* ============================================================
+   SCREEN 4 — RANGLISTE
+   ============================================================ */
+#board h2{ font-size:34px; margin:6px 0 14px; letter-spacing:.04em; }
+.seg{ display:flex; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:4px; margin-bottom:16px; }
+.seg button{
+  flex:1; padding:12px; border:none; border-radius:9px;
+  background:transparent; color:var(--ink-dim);
+  font-family:var(--font-display); font-size:16px; letter-spacing:.14em; text-transform:uppercase;
+  transition:all .2s ease;
+}
+.seg button.sel{
+  background:color-mix(in srgb, var(--accent) 16%, transparent);
+  color:var(--accent);
+  box-shadow:0 0 14px color-mix(in srgb, var(--accent) 18%, transparent) inset;
+}
+.board-list{ display:flex; flex-direction:column; gap:10px; }
+.row{
+  display:flex; align-items:center; gap:13px;
+  background:var(--panel); border:1px solid var(--line);
+  border-radius:14px; padding:14px 15px;
+  animation:rowIn .35s ease both;
+}
+.row:nth-child(1){ animation-delay:.02s } .row:nth-child(2){ animation-delay:.07s }
+.row:nth-child(3){ animation-delay:.12s } .row:nth-child(4){ animation-delay:.17s }
+.row:nth-child(5){ animation-delay:.22s } .row:nth-child(6){ animation-delay:.27s }
+@keyframes rowIn{ from{ opacity:0; transform:translateX(-18px); } to{ opacity:1; transform:none; } }
+.row .pos{ font-family:var(--font-display); font-size:20px; font-weight:700; width:36px; color:var(--ink-dim); }
+.row .ava{
+  width:42px; height:42px; border-radius:50%;
+  display:grid; place-items:center;
+  background:#161616; border:1px solid var(--line);
+  font-family:var(--font-display); font-weight:700; font-size:15px;
+}
+.row .name{ flex:1; font-size:19px; font-weight:500; overflow:hidden; text-overflow:ellipsis; }
+.row .pts{ font-family:var(--font-display); font-size:19px; font-weight:700; font-variant-numeric:tabular-nums; }
+.row.me{
+  border-color:var(--accent);
+  background:color-mix(in srgb, var(--accent) 9%, var(--panel));
+  box-shadow:0 0 24px color-mix(in srgb, var(--accent) 25%, transparent);
+  animation:rowIn .35s ease both, meFloat 1.8s ease-in-out .4s infinite;
+}
+@keyframes meFloat{ 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-5px);} }
+.row.me .pos,.row.me .pts{ color:var(--accent); }
+.row.me .ava{ border-color:var(--accent); color:var(--accent); }
+.row .trend{ font-size:15px; color:var(--accent); font-family:var(--font-display); animation:trendBob 1.1s ease-in-out infinite; }
+.row .trend.down{ color:var(--danger); animation-direction:reverse; }
+@keyframes trendBob{ 0%,100%{ transform:translateY(1px);} 50%{ transform:translateY(-2px);} }
+.pts.bump{ animation:ptsBump .4s ease; }
+@keyframes ptsBump{ 30%{ transform:scale(1.18); color:var(--accent); } }
+
+/* ============================================================
+   SCREEN 5 — PROFIL / ANGST-ANALYSE
+   ============================================================ */
+#profile h2{ font-size:34px; margin:6px 0 4px; letter-spacing:.04em; }
+.profile-sub{ font-size:16px; color:var(--ink-dim); margin-bottom:20px; }
+.profile-sub b{ color:var(--accent); font-family:var(--font-display); }
+
+.fears{ position:relative; }
+.fears::after{ /* Scan-Linie, die über die Analyse fährt */
+  content:""; position:absolute; left:-22px; right:-22px; top:0; height:2px;
+  background:linear-gradient(90deg, transparent, var(--accent), transparent);
+  box-shadow:0 0 16px var(--accent);
+  animation:scanY 3.4s ease-in-out infinite;
+  pointer-events:none;
+}
+@keyframes scanY{ 0%,100%{ top:0; opacity:0; } 10%,90%{ opacity:.8; } 50%{ top:100%; } }
+
+.fear{ margin-bottom:17px; }
+.fear-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:7px; }
+.fear-name{ font-size:20px; font-weight:500; }
+.fear-pct{
+  font-family:var(--font-display); font-size:22px; font-weight:700; color:var(--accent);
+  font-variant-numeric:tabular-nums;
+  text-shadow:0 0 14px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.bar{ height:10px; border-radius:5px; background:var(--line); overflow:hidden; }
+.bar i{
+  display:block; height:100%; width:0; position:relative;
+  background:linear-gradient(90deg, color-mix(in srgb, var(--accent) 50%, transparent), var(--accent));
+  box-shadow:0 0 14px color-mix(in srgb, var(--accent) 60%, transparent);
+  transition:width 1.1s cubic-bezier(.2,.8,.2,1);
+}
+.bar i::after{ /* Schimmer auf dem Balken */
+  content:""; position:absolute; inset:0;
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,.35), transparent);
+  background-size:200% 100%;
+  animation:barShimmer 1.6s linear infinite;
+}
+@keyframes barShimmer{ from{ background-position:200% 0; } to{ background-position:-200% 0; } }
+
+.tailored{
+  margin:22px 0; padding:18px;
+  border:1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius:14px;
+  font-size:18px; line-height:1.5; text-align:center;
+  animation:tailoredPulse 2.6s ease-in-out infinite;
+}
+@keyframes tailoredPulse{
+  0%,100%{ box-shadow:0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+  50%{ box-shadow:0 0 24px color-mix(in srgb, var(--accent) 16%, transparent); }
+}
+.tailored b{ color:var(--accent); }
+
+.stats{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:24px; }
+.stat{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px; text-align:center; }
+.stat .v{
+  font-family:var(--font-display); font-size:30px; font-weight:700; color:var(--accent);
+  font-variant-numeric:tabular-nums;
+  text-shadow:0 0 16px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.stat .l{ font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-dim); margin-top:4px; }
+
+/* ---------- Tab-Leiste ---------- */
+.tabs{
+  position:fixed; left:0; right:0; bottom:0; z-index:80;
+  display:none;
+  padding:10px 16px calc(10px + env(safe-area-inset-bottom));
+  background:rgba(5,5,5,.92);
+  backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+  border-top:1px solid var(--line);
+}
+.tabs.visible{ display:flex; }
+.tab{
+  flex:1; padding:12px 4px; border:none; background:transparent;
+  color:var(--ink-dim); font-size:13px; letter-spacing:.16em; text-transform:uppercase;
+  display:flex; flex-direction:column; align-items:center; gap:5px;
+  transition:color .2s ease;
+}
+.tab svg{ width:24px; height:24px; transition:transform .2s ease; }
+.tab.sel{ color:var(--accent); text-shadow:0 0 12px color-mix(in srgb, var(--accent) 60%, transparent); }
+.tab.sel svg{ transform:translateY(-3px) scale(1.12); filter:drop-shadow(0 0 8px var(--accent)); }
+
+/* ---------- Kamera-Overlay ---------- */
+#camOverlay{ position:fixed; inset:0; z-index:200; display:none; background:#000; }
+#camOverlay.open{ display:block; }
+#camVideo{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.cam-ui{
+  position:absolute; inset:0; display:flex; flex-direction:column; justify-content:space-between;
+  padding:max(env(safe-area-inset-top),20px) 20px calc(28px + env(safe-area-inset-bottom));
+}
+.cam-top{ display:flex; justify-content:space-between; align-items:center; }
+.rec{ display:flex; align-items:center; gap:9px; font-family:var(--font-display); letter-spacing:.26em; font-size:15px; color:#fff; }
+.rec i{
+  width:13px; height:13px; border-radius:50%; background:var(--danger);
+  animation:pulseDot .7s steps(1) infinite;
+  box-shadow:0 0 14px var(--danger);
+}
+.cam-close{
+  border:1px solid rgba(255,255,255,.4); background:rgba(0,0,0,.4);
+  color:#fff; font-size:15px; letter-spacing:.14em; padding:10px 16px; border-radius:10px;
+  font-family:var(--font-display);
+}
+.crosshair{
+  position:absolute; top:50%; left:50%; width:200px; height:200px;
+  transform:translate(-50%,-50%); pointer-events:none;
+  animation:chBreath 2s ease-in-out infinite;
+}
+@keyframes chBreath{ 0%,100%{ transform:translate(-50%,-50%) scale(1);} 50%{ transform:translate(-50%,-50%) scale(1.06);} }
+.crosshair::before,.crosshair::after{ content:""; position:absolute; background:color-mix(in srgb, var(--accent) 85%, transparent); }
+.crosshair::before{ left:50%; top:0; width:1px; height:100%; }
+.crosshair::after{ top:50%; left:0; height:1px; width:100%; }
+.ch-corner{ position:absolute; width:28px; height:28px; border:2px solid var(--accent); }
+.ch-corner.tl{ top:0; left:0; border-right:none; border-bottom:none; }
+.ch-corner.tr{ top:0; right:0; border-left:none; border-bottom:none; }
+.ch-corner.bl{ bottom:0; left:0; border-right:none; border-top:none; }
+.ch-corner.br{ bottom:0; right:0; border-left:none; border-top:none; }
+.cam-caption{
+  text-align:center; font-family:var(--font-display); font-size:16px;
+  letter-spacing:.22em; text-transform:uppercase; color:var(--accent);
+  animation:countGlow .9s ease-in-out infinite;
+  margin-bottom:18px;
+}
+.shutter{
+  width:80px; height:80px; border-radius:50%; margin:0 auto; display:block;
+  border:4px solid #fff; background:rgba(255,255,255,.15);
+}
+.shutter:active{ background:#fff; }
+#camFlash{ position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; transition:opacity .2s ease; }
+
+/* ---------- Reduced Motion ---------- */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{ animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
+}
+</style>
+</head>
+<body>
+
+<canvas id="particles"></canvas>
+<div class="breath"></div>
+
+<!-- Logo-Symbol für Wiederverwendung (Topbar) -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <g id="eyeLogo">
+      <path d="M50 6 L96 88 L4 88 Z" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M22 62 Q50 38 78 62 Q50 82 22 62 Z" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+      <circle cx="50" cy="60" r="9.5" fill="var(--accent)"/>
+      <circle cx="50" cy="60" r="3.5" fill="var(--bg)"/>
+    </g>
+  </defs>
+</svg>
+
+<!-- ============================================================
+     SCREEN 1 — INTRO   (Slogan-Texte hier im HTML änderbar)
+     ============================================================ -->
+<section class="screen active" id="intro">
+  <div class="logo-wrap">
+    <div class="orbit"></div>
+    <div class="orbit r2"></div>
+    <!-- Logo inline, damit Blinzeln + Iris-Drift per CSS funktionieren -->
+    <svg class="logo" viewBox="0 0 100 100">
+      <path d="M50 6 L96 88 L4 88 Z" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linejoin="round"/>
+      <g class="eyeball">
+        <path d="M22 62 Q50 38 78 62 Q50 82 22 62 Z" fill="none" stroke="var(--accent)" stroke-width="2.5"/>
+        <g class="iris">
+          <circle cx="50" cy="60" r="9.5" fill="var(--accent)"/>
+          <circle cx="50" cy="60" r="3.5" fill="var(--bg)"/>
+        </g>
+      </g>
+    </svg>
+  </div>
+  <h1 class="appname" data-text="VANTA">VANTA</h1>
+  <p class="slogan">Wir wissen, wovor du dich <b>fürchtest</b>.</p>
+  <p class="slogan-sub" id="typeLine"></p>
+  <button class="btn" id="btnJoin">Beitreten</button>
+  <p class="watchers"><i></i><b id="watchCount">14&thinsp;208</b> sehen gerade zu</p>
+  <div class="ticker" id="introTicker"><span class="track"></span></div>
+</section>
+
+<!-- ============================================================
+     SCREEN 2 — BERECHTIGUNGEN
+     ============================================================ -->
+<section class="screen" id="permissions">
+  <p class="eyebrow">Initialisierung</p>
+  <h2>VANTA benötigt<br>Zugriff.</h2>
+  <div class="perm-list" id="permList">
+    <div class="perm"><span class="perm-name">Kamera</span><span class="perm-scan">VERBUNDEN</span><span class="perm-check">✓</span></div>
+    <div class="perm"><span class="perm-name">Standort</span><span class="perm-scan">ERFASST</span><span class="perm-check">✓</span></div>
+    <div class="perm"><span class="perm-name">Kontakte</span><span class="perm-scan">312 GELESEN</span><span class="perm-check">✓</span></div>
+    <div class="perm"><span class="perm-name">Fotos</span><span class="perm-scan">INDEXIERT</span><span class="perm-check">✓</span></div>
+    <div class="perm"><span class="perm-name">Social-Media-Verlauf</span><span class="perm-scan">ANALYSIERT</span><span class="perm-check">✓</span></div>
+    <div class="perm"><span class="perm-name">Mikrofon</span><span class="perm-scan">AKTIV</span><span class="perm-check">✓</span></div>
+  </div>
+  <p class="perm-note">Zur Personalisierung deiner Herausforderungen.<br>Eine Ablehnung ist nicht vorgesehen.</p>
+  <button class="btn" id="btnAccept" disabled>Akzeptieren</button>
+  <div style="height:30px"></div>
+</section>
+
+<!-- ============================================================
+     SCREEN 3 — HOME / CHALLENGE
+     ============================================================ -->
+<section class="screen has-tabs" id="home">
+  <div class="topbar">
+    <svg class="mini-logo" viewBox="0 0 100 100"><use href="#eyeLogo"/></svg>
+    <span class="appname-small">VANTA</span>
+    <span class="live"><i></i>LIVE</span>
+  </div>
+
+  <div class="status-card">
+    <div class="status-block">
+      <div class="lbl">Rang</div>
+      <div class="val accent">SCHATTEN&nbsp;IV</div>
+    </div>
+    <div class="status-block" style="text-align:center">
+      <div class="lbl">Ansehen</div>
+      <div class="val" id="repCounter">0</div>
+    </div>
+    <div class="status-block" style="text-align:right">
+      <div class="lbl">Nächste Stufe</div>
+      <div class="val countdown" id="countdown">04:58</div>
+    </div>
+  </div>
+
+  <div class="glow-frame">
+    <div class="challenge-card">
+      <div class="ch-meta">
+        <span>Stufe 4</span>
+        <span class="risk">Risiko: Hoch</span>
+      </div>
+      <!-- Challenge-Titel bleibt bewusst vage/filmisch -->
+      <h3 class="ch-title locked" id="chTitle">Beweise, dass du keine Angst im Dunkeln hast.</h3>
+      <p class="ch-sub" id="chSub">Einsatz platzieren, um die Herausforderung aufzudecken.</p>
+
+      <div class="stake-box" id="stakeBox">
+        <div class="stake-row">
+          <span class="lbl">Dein Einsatz</span>
+          <span class="stake-val" id="stakeVal">50&nbsp;€</span>
+        </div>
+        <input type="range" id="stakeSlider" min="10" max="500" step="10" value="50">
+        <div class="payout">
+          <span class="dim">Auszahlung bei Erfolg</span>
+          <b id="payoutVal">180 €</b>
+        </div>
+        <button class="btn" id="btnStake">Einsatz platzieren</button>
+        <p class="forfeit">Bei Abbruch <b>verfällt</b> dein Einsatz.</p>
+      </div>
+
+      <div class="action-stack" id="actionStack" style="display:none">
+        <button class="btn" id="btnProof">Beweis hochladen</button>
+        <button class="btn ghost" id="btnAcceptCh">Challenge annehmen</button>
+        <p class="forfeit">VANTA beobachtet. <b>Kein Rückzug.</b></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="ticker" id="homeTicker" style="margin-top:auto"><span class="track"></span></div>
+</section>
+
+<!-- ============================================================
+     SCREEN 4 — RANGLISTE
+     ============================================================ -->
+<section class="screen has-tabs" id="board">
+  <p class="eyebrow">Hierarchie</p>
+  <h2>Rangliste</h2>
+  <div class="seg">
+    <button class="sel" id="segFriends">Freunde</button>
+    <button id="segGlobal">Global</button>
+  </div>
+  <div class="board-list" id="boardList"></div>
+  <div style="height:20px"></div>
+</section>
+
+<!-- ============================================================
+     SCREEN 5 — PROFIL / ANGST-ANALYSE
+     ============================================================ -->
+<section class="screen has-tabs" id="profile">
+  <p class="eyebrow">Analyse abgeschlossen</p>
+  <h2>Dein Profil.</h2>
+  <p class="profile-sub">Quelle: <b id="dataPoints">3 412</b> ausgewertete Datenpunkte.</p>
+
+  <!-- Ängste hier ändern: Name + data-pct -->
+  <div class="fears" id="fears">
+    <div class="fear" data-pct="87">
+      <div class="fear-head"><span class="fear-name">Höhenangst</span><span class="fear-pct">0 %</span></div>
+      <div class="bar"><i></i></div>
+    </div>
+    <div class="fear" data-pct="73">
+      <div class="fear-head"><span class="fear-name">Angst vor Ablehnung</span><span class="fear-pct">0 %</span></div>
+      <div class="bar"><i></i></div>
+    </div>
+    <div class="fear" data-pct="64">
+      <div class="fear-head"><span class="fear-name">Dunkelheit</span><span class="fear-pct">0 %</span></div>
+      <div class="bar"><i></i></div>
+    </div>
+    <div class="fear" data-pct="58">
+      <div class="fear-head"><span class="fear-name">Kontrollverlust</span><span class="fear-pct">0 %</span></div>
+      <div class="bar"><i></i></div>
+    </div>
+  </div>
+
+  <div class="tailored">Deine nächsten Herausforderungen sind <b>auf dich zugeschnitten</b>.</div>
+
+  <div class="stats">
+    <div class="stat"><div class="v" data-count="23">0</div><div class="l">Challenges</div></div>
+    <div class="stat"><div class="v" data-count="250" data-suffix=" €">0</div><div class="l">Höchster Einsatz</div></div>
+    <div class="stat"><div class="v" data-count="91" data-suffix=" %">0</div><div class="l">Bindung</div></div>
+    <div class="stat"><div class="v" data-count="6">0</div><div class="l">Tage in Folge</div></div>
+  </div>
+  <div style="height:20px"></div>
+</section>
+
+<!-- Tab-Leiste -->
+<nav class="tabs" id="tabs">
+  <button class="tab sel" data-target="home">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 L22 20 L2 20 Z"/></svg>
+    Challenge
+  </button>
+  <button class="tab" data-target="board">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10 M12 20V4 M20 20v-7"/></svg>
+    Rangliste
+  </button>
+  <button class="tab" data-target="profile">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12 Q12 4 22 12 Q12 20 2 12 Z"/><circle cx="12" cy="12" r="3"/></svg>
+    Profil
+  </button>
+</nav>
+
+<!-- Kamera-Overlay (getUserMedia) -->
+<div id="camOverlay">
+  <video id="camVideo" autoplay playsinline muted></video>
+  <div id="camFlash"></div>
+  <div class="cam-ui">
+    <div class="cam-top">
+      <span class="rec"><i></i>AUFNAHME</span>
+      <button class="cam-close" id="btnCamClose">Schliessen</button>
+    </div>
+    <div class="crosshair">
+      <span class="ch-corner tl"></span><span class="ch-corner tr"></span>
+      <span class="ch-corner bl"></span><span class="ch-corner br"></span>
+    </div>
+    <div>
+      <p class="cam-caption">Beweis wird analysiert …</p>
+      <button class="shutter" id="btnShutter" aria-label="Auslöser"></button>
+    </div>
+  </div>
+</div>
+
+<!-- Fallback: öffnet zuverlässig die native iPhone-Kamera -->
+<input type="file" accept="image/*" capture="environment" id="fileCam" style="display:none">
+
+<div class="scanlines"></div>
+<div class="vignette"></div>
+
+<script>
+/* ============================================================
+   ▼▼▼ HIER ANPASSEN ▼▼▼
+   APP_NAME      : wird überall ersetzt
+   PAYOUT_FACTOR : "Gewinn" = Einsatz × Faktor
+   TICKER_ITEMS  : Lauftext-Meldungen (Intro + Home)
+   ============================================================ */
+const APP_NAME = "VANTA";   // z. B. "ORAKEL", "NEMESIS", "ASCEND", "ABYSS"
+const PAYOUT_FACTOR = 3.6;
+const TICKER_ITEMS = [
+  "<b>NOX_Levi</b> hat Stufe 5 bestanden",
+  "<b>jule.exe</b> Einsatz verloren −120 €",
+  "<b>t0bs</b> ist aufgestiegen",
+  "Neue Beobachter in deiner Region",
+  "<b>Mar1e_K</b> hat eine Challenge abgebrochen",
+  "Dein Profil wurde 3× aufgerufen",
+];
+
+/* App-Name überall einsetzen */
+document.title = APP_NAME;
+document.querySelectorAll(".appname, .appname-small").forEach(el=>{
+  el.textContent = APP_NAME;
+  if(el.dataset.text !== undefined) el.dataset.text = APP_NAME;
+});
+document.querySelector("#permissions h2").innerHTML = APP_NAME + " benötigt<br>Zugriff.";
+
+/* ---------- Partikel-Hintergrund (langsam aufsteigende Punkte) ---------- */
+(function(){
+  try{
+  const cv = document.getElementById("particles");
+  const ctx = cv.getContext && cv.getContext("2d");
+  if(!ctx) return;                       // ohne Canvas einfach ohne Partikel weiterlaufen
+  let W, H, dots = [];
+  function size(){
+    W = cv.width = innerWidth * devicePixelRatio;
+    H = cv.height = innerHeight * devicePixelRatio;
+  }
+  size(); addEventListener("resize", size);
+  const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+  for(let i=0;i<46;i++) dots.push({
+    x:Math.random(), y:Math.random(),
+    s:(Math.random()*1.6+.5) * devicePixelRatio,
+    v:(Math.random()*.0007+.0003),
+    sway:Math.random()*6.28, a:Math.random()*.5+.15
+  });
+  (function frame(){
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = accent;
+    for(const d of dots){
+      d.y -= d.v; d.sway += .012;
+      if(d.y < -0.02){ d.y = 1.02; d.x = Math.random(); }
+      ctx.globalAlpha = d.a * (0.6 + 0.4*Math.sin(d.sway*2));
+      ctx.beginPath();
+      ctx.arc((d.x + Math.sin(d.sway)*.012)*W, d.y*H, d.s, 0, 6.29);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(frame);
+  })();
+  }catch(e){ /* Partikel sind nur Deko — Fehler hier dürfen nichts blockieren */ }
+})();
+
+/* ---------- Ticker füllen (Inhalt doppelt für nahtlosen Loop) ---------- */
+function fillTicker(id){
+  const html = TICKER_ITEMS.map(t=>t+'<span class="sep">◢</span>').join("");
+  document.querySelector("#"+id+" .track").innerHTML = html + html;
+}
+fillTicker("introTicker");
+fillTicker("homeTicker");
+
+/* ---------- Screen-Navigation ---------- */
+const tabs = document.getElementById("tabs");
+function showScreen(id){
+  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
+  const sc = document.getElementById(id);
+  sc.classList.add("active");
+  sc.scrollTop = 0;
+  if(id==="profile") animateProfile();
+  document.querySelectorAll(".tab").forEach(t=>
+    t.classList.toggle("sel", t.dataset.target===id));
+}
+document.querySelectorAll(".tab").forEach(t=>
+  t.addEventListener("click", ()=>showScreen(t.dataset.target)));
+
+/* ---------- Globaler Glitch (ganzer Screen, zufällig) ---------- */
+const intro = document.getElementById("intro");
+function doGlitch(){
+  document.body.classList.add("glitch");
+  intro.classList.add("glitching");
+  setTimeout(()=>{
+    document.body.classList.remove("glitch");
+    intro.classList.remove("glitching");
+  }, 300);
+  setTimeout(doGlitch, 1800 + Math.random()*2200);
+}
+setTimeout(doGlitch, 1500);
+
+/* ---------- Intro: Tipp-Effekt + Zuschauer-Zähler ---------- */
+const TYPE_TEXT = "Überwinde dich. Werde gesehen.";   // ◀ Slogan-Zeile 2
+(function typeLoop(){
+  const el = document.getElementById("typeLine");
+  let i = 0;
+  const tick = setInterval(()=>{
+    el.textContent = TYPE_TEXT.slice(0, ++i);
+    if(i >= TYPE_TEXT.length){
+      clearInterval(tick);
+      setTimeout(()=>{ el.textContent=""; typeLoop(); }, 3500);
+    }
+  }, 55);
+})();
+
+let watchers = 14208;
+setInterval(()=>{
+  watchers += Math.floor(Math.random()*9) - 2;
+  document.getElementById("watchCount").textContent = watchers.toLocaleString("de-DE");
+}, 900);
+
+/* ---------- Beitreten → Berechtigungen (Häkchen ticken schnell durch) ---------- */
+document.getElementById("btnJoin").addEventListener("click", ()=>{
+  showScreen("permissions");
+  const perms = document.querySelectorAll("#permList .perm");
+  perms.forEach((p,i)=>setTimeout(()=>{
+    p.classList.add("on");
+    if(i === perms.length-1)
+      document.getElementById("btnAccept").removeAttribute("disabled");
+  }, 450 + i*420));
+});
+
+/* ---------- Akzeptieren → Home ---------- */
+document.getElementById("btnAccept").addEventListener("click", ()=>{
+  tabs.classList.add("visible");
+  showScreen("home");
+  startRepCounter();
+});
+
+/* ---------- Home: Countdown (unter 1 Min. rot) ---------- */
+let cd = 4*60 + 58;
+setInterval(()=>{
+  cd = cd > 0 ? cd - 1 : 299;
+  const m = String(Math.floor(cd/60)).padStart(2,"0");
+  const s = String(cd%60).padStart(2,"0");
+  const el = document.getElementById("countdown");
+  el.textContent = m+":"+s;
+  el.classList.toggle("hot", cd < 60);
+}, 1000);
+
+/* ---------- Home: Ansehen zählt hoch & tröpfelt weiter ---------- */
+let repStarted = false;
+function startRepCounter(){
+  if(repStarted) return; repStarted = true;
+  let rep = 0, target = 2847;
+  const el = document.getElementById("repCounter");
+  (function step(){
+    rep += Math.ceil((target-rep)/10);
+    el.textContent = rep.toLocaleString("de-DE");
+    if(rep < target) requestAnimationFrame(step);
+  })();
+  setInterval(()=>{
+    target += Math.floor(Math.random()*4);
+    el.textContent = target.toLocaleString("de-DE");
+  }, 1800);
+}
+
+/* ---------- Einsatz-Slider ---------- */
+const slider = document.getElementById("stakeSlider");
+function updateStake(){
+  const v = +slider.value;
+  document.getElementById("stakeVal").innerHTML = v + "&nbsp;€";
+  document.getElementById("payoutVal").textContent = Math.round(v*PAYOUT_FACTOR) + " €";
+  slider.style.setProperty("--fill", ((v-slider.min)/(slider.max-slider.min)*100)+"%");
+}
+slider.addEventListener("input", updateStake);
+updateStake();
+
+/* ---------- Scramble-Effekt: Text "entschlüsselt" sich ---------- */
+function scramble(el, finalText, speed){
+  const chars = "█▓▒░ΛVΞX#%&@01";
+  let frame = 0;
+  const tick = setInterval(()=>{
+    frame++;
+    const revealed = Math.floor(frame/2);
+    let out = "";
+    for(let i=0;i<finalText.length;i++)
+      out += i < revealed ? finalText[i]
+           : chars[Math.floor(Math.random()*chars.length)];
+    el.textContent = out;
+    if(revealed >= finalText.length){ clearInterval(tick); el.textContent = finalText; }
+  }, speed || 16);
+}
+
+/* ---------- Einsatz platzieren → Challenge entschlüsselt sich ---------- */
+document.getElementById("btnStake").addEventListener("click", ()=>{
+  const title = document.getElementById("chTitle");
+  const text = title.textContent.trim();
+  title.classList.remove("locked");
+  scramble(title, text, 14);
+  document.getElementById("chSub").textContent =
+    "Einsatz angenommen. " + APP_NAME + " erwartet deinen Beweis.";
+  document.getElementById("stakeBox").style.display = "none";
+  document.getElementById("actionStack").style.display = "flex";
+  document.body.classList.add("glitch");
+  setTimeout(()=>document.body.classList.remove("glitch"), 300);
+});
+
+/* ---------- Kamera ----------
+   "Challenge annehmen": In-App-Overlay (getUserMedia) — braucht HTTPS!
+   "Beweis hochladen":   nativer iOS-Kamera-Dialog (input capture)
+   Scheitert das Overlay, springt automatisch der native Dialog ein. */
+const overlay = document.getElementById("camOverlay");
+const video = document.getElementById("camVideo");
+const fileCam = document.getElementById("fileCam");
+let stream = null;
+
+async function openCamOverlay(){
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:"environment" }, audio:false
+    });
+    video.srcObject = stream;
+    overlay.classList.add("open");
+  }catch(e){
+    fileCam.click();
+  }
+}
+function closeCamOverlay(){
+  overlay.classList.remove("open");
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream = null; }
+}
+document.getElementById("btnAcceptCh").addEventListener("click", openCamOverlay);
+document.getElementById("btnCamClose").addEventListener("click", closeCamOverlay);
+document.getElementById("btnProof").addEventListener("click", ()=>fileCam.click());
+
+document.getElementById("btnShutter").addEventListener("click", ()=>{
+  const flash = document.getElementById("camFlash");
+  flash.style.opacity = ".9";
+  setTimeout(()=>flash.style.opacity = "0", 110);
+});
+fileCam.addEventListener("change", ()=>{
+  document.getElementById("chSub").textContent = "Beweis empfangen. Analyse läuft …";
+  fileCam.value = "";
+});
+
+/* ---------- Rangliste (erfundene Daten — hier ändern) ---------- */
+const FRIENDS = [
+  { name:"NOX_Levi",  pts:4120, trend:"▲" },
+  { name:"DU",        pts:2847, trend:"▲", me:true },
+  { name:"jule.exe",  pts:2710, trend:"▼" },
+  { name:"Mar1e_K",   pts:2230, trend:"▲" },
+  { name:"t0bs",      pts:1980, trend:"▼" },
+  { name:"phantom_F", pts:1540, trend:"▲" },
+];
+const GLOBAL = [
+  { name:"V0ID",      pts:99410, trend:"▲" },
+  { name:"seraph__",  pts:88210, trend:"▲" },
+  { name:"NULLPUNKT", pts:71050, trend:"▼" },
+  { name:"…",         pts:null },
+  { name:"DU",        pts:2847, trend:"▲", me:true, pos:14208 },
+];
+let currentList = FRIENDS;
+
+function renderBoard(list){
+  currentList = list;
+  const box = document.getElementById("boardList");
+  box.innerHTML = "";
+  list.forEach((e,i)=>{
+    const row = document.createElement("div");
+    row.className = "row" + (e.me ? " me" : "");
+    const pos = e.pos ?? i+1;
+    const initials = e.name.replace(/[^A-Za-zÄÖÜäöü]/g,"").slice(0,2).toUpperCase() || "•";
+    row.innerHTML = e.pts === null
+      ? `<span class="pos">…</span><span class="name dim">&nbsp;</span>`
+      : `<span class="pos">${pos}</span>
+         <span class="ava">${e.me ? "DU" : initials}</span>
+         <span class="name">${e.name}</span>
+         <span class="trend ${e.trend==="▼"?"down":""}">${e.trend ?? ""}</span>
+         <span class="pts">${e.pts.toLocaleString("de-DE")}</span>`;
+    box.appendChild(row);
+  });
+}
+renderBoard(FRIENDS);
+document.getElementById("segFriends").addEventListener("click", e=>{
+  e.target.classList.add("sel");
+  document.getElementById("segGlobal").classList.remove("sel");
+  renderBoard(FRIENDS);
+});
+document.getElementById("segGlobal").addEventListener("click", e=>{
+  e.target.classList.add("sel");
+  document.getElementById("segFriends").classList.remove("sel");
+  renderBoard(GLOBAL);
+});
+
+/* Rangliste "lebt": Punkte ticken zufällig hoch */
+setInterval(()=>{
+  const rows = document.querySelectorAll("#boardList .row");
+  if(!rows.length) return;
+  const i = Math.floor(Math.random()*currentList.length);
+  const entry = currentList[i];
+  if(!entry || entry.pts === null) return;
+  entry.pts += Math.floor(Math.random()*14)+2;
+  const pts = rows[i]?.querySelector(".pts");
+  if(pts){
+    pts.textContent = entry.pts.toLocaleString("de-DE");
+    pts.classList.remove("bump"); void pts.offsetWidth;   // Animation neu starten
+    pts.classList.add("bump");
+  }
+}, 1600);
+
+/* ---------- Profil: Balken, Statistiken, Datenpunkte ---------- */
+let profileAnimated = false;
+function animateProfile(){
+  if(profileAnimated){ return; }
+  profileAnimated = true;
+  document.querySelectorAll(".fear").forEach((f,i)=>{
+    const pct = +f.dataset.pct;
+    setTimeout(()=>{
+      f.querySelector(".bar i").style.width = pct + "%";
+      let cur = 0;
+      const tick = setInterval(()=>{
+        cur += 3;
+        if(cur >= pct){ cur = pct; clearInterval(tick); }
+        f.querySelector(".fear-pct").textContent = cur + " %";
+      }, 22);
+    }, 120 + i*180);
+  });
+  document.querySelectorAll(".stat .v").forEach(el=>{
+    const target = +el.dataset.count, suffix = el.dataset.suffix ?? "";
+    let cur = 0;
+    const tick = setInterval(()=>{
+      cur += Math.max(1, Math.ceil(target/30));
+      if(cur >= target){ cur = target; clearInterval(tick); }
+      el.textContent = cur + suffix;
+    }, 28);
+  });
+  /* danach flackern die Prozente leicht — die Analyse "arbeitet" weiter */
+  setTimeout(()=>{
+    setInterval(()=>{
+      const fears = document.querySelectorAll(".fear");
+      const f = fears[Math.floor(Math.random()*fears.length)];
+      const base = +f.dataset.pct;
+      const val = base + (Math.random() < .5 ? -1 : 1);
+      f.querySelector(".fear-pct").textContent = val + " %";
+      f.querySelector(".bar i").style.width = val + "%";
+    }, 2400);
+  }, 3500);
+  /* Datenpunkte zählen langsam weiter hoch */
+  let dp = 3412;
+  setInterval(()=>{
+    dp += Math.floor(Math.random()*5)+1;
+    document.getElementById("dataPoints").textContent = dp.toLocaleString("de-DE");
+  }, 2100);
+}
+</script>
+</body>
+</html>
